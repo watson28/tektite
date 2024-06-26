@@ -5,38 +5,22 @@ import (
 )
 
 type ChainingIterator struct {
-	iterators []Iterator
+	iterators []SimplerIterator
 	pos       int
 }
 
-func NewChainingIterator(its []Iterator) *ChainingIterator {
+func NewChainingIteratorFromSimple(its []SimplerIterator) *ChainingIterator {
 	return &ChainingIterator{iterators: its}
 }
 
-func (c *ChainingIterator) Current() common.KV {
-	return c.iterators[c.pos].Current()
-}
-
-func (c *ChainingIterator) Next() error {
-	if err := c.iterators[c.pos].Next(); err != nil {
-		return err
+func (c *ChainingIterator) Next() (bool, common.KV) {
+	for ; c.pos < len(c.iterators); c.pos++ {
+		valid, kv := c.iterators[c.pos].Next()
+		if valid {
+			return true, kv
+		}
 	}
-	valid, err := c.iterators[c.pos].IsValid()
-	if err != nil {
-		return err
-	}
-	if valid {
-		return nil
-	}
-	c.pos++
-	return nil
-}
-
-func (c *ChainingIterator) IsValid() (bool, error) {
-	if c.pos >= len(c.iterators) {
-		return false, nil
-	}
-	return c.iterators[c.pos].IsValid()
+	return false, common.KV{}
 }
 
 func (c *ChainingIterator) Close() {

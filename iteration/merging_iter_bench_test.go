@@ -11,7 +11,7 @@ import (
 func BenchmarkMergingIterator(b *testing.B) {
 	numEntries := 1000
 	numIters := 10
-	iters := make([]Iterator, numIters)
+	iters := make([]SimplerIterator, numIters)
 	for i := 0; i < numIters; i++ {
 		iters[i] = &StaticIterator{}
 	}
@@ -33,18 +33,15 @@ func BenchmarkMergingIterator(b *testing.B) {
 			iters[j].(*StaticIterator).pos = 0
 		}
 
-		mi, err := NewMergingIterator(iters, false, 0)
+		mi, err := NewMergingIteratorFromSimple(iters, false, 0)
 		require.NoError(b, err)
 
 		for j := 0; j < numEntries; j++ {
-			valid, err := mi.IsValid()
-			if err != nil {
-				panic(err)
-			}
+			valid, curr := mi.Next()
 			if !valid {
 				panic("not valid")
 			}
-			curr := mi.Current()
+			// curr := mi.Current()
 			expectedKey := expectedKeys[j]
 			expectedVal := expectedVals[j]
 			if !bytes.Equal(expectedKey, curr.Key) {
@@ -53,10 +50,10 @@ func BenchmarkMergingIterator(b *testing.B) {
 			if !bytes.Equal(expectedVal, curr.Value) {
 				panic("key not equal")
 			}
-			err = mi.Next()
-			if err != nil {
-				panic(err)
-			}
+			// err = mi.Next()
+			// if err != nil {
+			// panic(err)
+			// }
 		}
 	}
 }
