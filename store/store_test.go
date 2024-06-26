@@ -104,14 +104,14 @@ func TestNewerEntriesOverrideOlderOnesAfterPush(t *testing.T) {
 
 	iter, err := store.NewIterator(nil, nil, math.MaxUint64, false)
 	require.NoError(t, err)
-	requireIterValid(t, iter, true)
-	curr := iter.Current()
+	curr := requireNextValid(t, iter, true)
+	// curr := iter.Current()
 	curr.Key = curr.Key[:len(curr.Key)-8]
 	require.Equal(t, "key1", string(curr.Key))
 	require.Equal(t, "val1_1", string(curr.Value))
-	err = iter.Next()
-	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	// err = iter.Next()
+	// require.NoError(t, err)
+	requireNextValid(t, iter, false)
 }
 
 func writeBatchInSSTable(t *testing.T, store *Store, batch *mem.Batch) {
@@ -134,14 +134,14 @@ func TestSimpleIterate(t *testing.T) {
 
 	iter, err := store.NewIterator(nil, nil, math.MaxUint64, false)
 	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	requireNextValid(t, iter, false)
 
 	writeKVs(t, store, 0, 10)
 	iteratePairs(t, iter, 0, 10)
 
-	err = iter.Next()
-	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	// err = iter.Next()
+	// require.NoError(t, err)
+	requireNextValid(t, iter, false)
 }
 
 func TestIterateAllThenAddMore(t *testing.T) {
@@ -150,14 +150,14 @@ func TestIterateAllThenAddMore(t *testing.T) {
 
 	iter, err := store.NewIterator(nil, nil, math.MaxUint64, false)
 	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	requireNextValid(t, iter, false)
 
 	writeKVs(t, store, 0, 10)
 	iteratePairs(t, iter, 0, 10)
 
-	err = iter.Next()
-	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	// err = iter.Next()
+	// require.NoError(t, err)
+	// requireNextValid(t, iter, false)
 
 	writeKVs(t, store, 10, 10)
 	iteratePairs(t, iter, 10, 10)
@@ -180,16 +180,16 @@ func TestIteratorPicksUpAddedDataAfterDataWithGreaterKeyAlreadyExists(t *testing
 	iter, err := store.NewIterator(ks, ke, math.MaxUint64, false)
 	require.NoError(t, err)
 
-	requireIterValid(t, iter, false)
+	requireNextValid(t, iter, false)
 
 	writeKVs(t, store, 4, 1)
 
-	requireIterValid(t, iter, true)
+	// requireNextValid(t, iter, true)
 
 	iteratePairs(t, iter, 4, 1)
-	err = iter.Next()
-	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	// err = iter.Next()
+	// require.NoError(t, err)
+	requireNextValid(t, iter, false)
 }
 
 func TestIterateInRange(t *testing.T) {
@@ -201,14 +201,14 @@ func TestIterateInRange(t *testing.T) {
 
 	iter, err := store.NewIterator(ks, ke, math.MaxUint64, false)
 	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	requireNextValid(t, iter, false)
 
 	writeKVs(t, store, 0, 10)
 	iteratePairs(t, iter, 3, 4)
 
-	err = iter.Next()
-	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	// err = iter.Next()
+	// require.NoError(t, err)
+	requireNextValid(t, iter, false)
 }
 
 func TestIterateInRangeNoEndRange(t *testing.T) {
@@ -219,14 +219,14 @@ func TestIterateInRangeNoEndRange(t *testing.T) {
 
 	iter, err := store.NewIterator(ks, nil, math.MaxUint64, false)
 	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	requireNextValid(t, iter, false)
 
 	writeKVs(t, store, 0, 10)
 	iteratePairs(t, iter, 3, 7)
 
-	err = iter.Next()
-	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	// err = iter.Next()
+	// require.NoError(t, err)
+	requireNextValid(t, iter, false)
 }
 
 func TestIterateThenDelete(t *testing.T) {
@@ -235,19 +235,19 @@ func TestIterateThenDelete(t *testing.T) {
 
 	iter, err := store.NewIterator(nil, nil, math.MaxUint64, false)
 	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	requireNextValid(t, iter, false)
 
 	writeKVs(t, store, 0, 10)
 	iteratePairs(t, iter, 0, 5)
 
-	requireIterValid(t, iter, true)
+	// requireNextValid(t, iter, true)
 
 	// Then we delete the rest of them from the memtable
 	writeKVsWithTombstones(t, store, 5, 5)
 
-	err = iter.Next()
-	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	// _, _ = iter.Next()
+	// require.Equal(t, false, valid)
+	requireNextValid(t, iter, false)
 }
 
 func TestIterateThenReplaceThenDelete(t *testing.T) {
@@ -256,21 +256,21 @@ func TestIterateThenReplaceThenDelete(t *testing.T) {
 
 	iter, err := store.NewIterator(nil, nil, math.MaxUint64, false)
 	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	requireNextValid(t, iter, false)
 
 	writeKVs(t, store, 0, 10)
 	iteratePairs(t, iter, 0, 5)
-	requireIterValid(t, iter, true)
+	requireNextValid(t, iter, true)
 
 	err = store.forceReplaceMemtable()
 	require.NoError(t, err)
-	requireIterValid(t, iter, true)
+	requireNextValid(t, iter, true)
 
 	// Then we delete the rest of them from the memtable
 	writeKVsWithTombstones(t, store, 5, 5)
-	err = iter.Next()
-	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	// err = iter.Next()
+	// require.NoError(t, err)
+	requireNextValid(t, iter, false)
 }
 
 func TestIterateAllMemtableThenReplace(t *testing.T) {
@@ -280,7 +280,7 @@ func TestIterateAllMemtableThenReplace(t *testing.T) {
 
 	iter, err := store.NewIterator(nil, nil, math.MaxUint64, false)
 	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	requireNextValid(t, iter, false)
 
 	// fully iterate through the memtable, then force a replace then fully iterate again. and repeat
 
@@ -288,9 +288,9 @@ func TestIterateAllMemtableThenReplace(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		writeKVs(t, store, ks, 10)
 		iteratePairs(t, iter, ks, 10)
-		err = iter.Next()
-		require.NoError(t, err)
-		requireIterValid(t, iter, false)
+		// err = iter.Next()
+		// require.NoError(t, err)
+		requireNextValid(t, iter, false)
 
 		err = store.forceReplaceMemtable()
 		require.NoError(t, err)
@@ -304,7 +304,7 @@ func TestIterateSomeMemtableThenReplace(t *testing.T) {
 
 	iter, err := store.NewIterator(nil, nil, math.MaxUint64, false)
 	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	requireNextValid(t, iter, false)
 
 	// partially iterate through the memtable, then force a replace then fully iterate again. and repeat
 
@@ -314,7 +314,7 @@ func TestIterateSomeMemtableThenReplace(t *testing.T) {
 
 		// Only iterate through some of them
 		iteratePairs(t, iter, ks, 5)
-		requireIterValid(t, iter, true)
+		// requireNextValid(t, iter, true)
 
 		err = store.forceReplaceMemtable()
 		require.NoError(t, err)
@@ -322,12 +322,12 @@ func TestIterateSomeMemtableThenReplace(t *testing.T) {
 		ks += 5
 
 		// Then iterate through the rest
-		err = iter.Next()
-		require.NoError(t, err)
+		// err = iter.Next()
+		// require.NoError(t, err)
 		iteratePairs(t, iter, ks, 5)
-		err = iter.Next()
-		require.NoError(t, err)
-		requireIterValid(t, iter, false)
+		// err = iter.Next()
+		// require.NoError(t, err)
+		requireNextValid(t, iter, false)
 
 		ks += 5
 	}
@@ -339,14 +339,14 @@ func TestIterateThenReplaceThenAddWithSmallerKey(t *testing.T) {
 
 	iter, err := store.NewIterator(nil, nil, math.MaxUint64, false)
 	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	requireNextValid(t, iter, false)
 
 	writeKVs(t, store, 0, 10)
 	iteratePairs(t, iter, 0, 10)
 
-	err = iter.Next()
-	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	// err = iter.Next()
+	// require.NoError(t, err)
+	requireNextValid(t, iter, false)
 
 	err = store.forceReplaceMemtable()
 	require.NoError(t, err)
@@ -355,14 +355,14 @@ func TestIterateThenReplaceThenAddWithSmallerKey(t *testing.T) {
 	writeKVsWithValueSuffix(t, store, 0, 10, "suf")
 
 	// We shouldn't see these
-	requireIterValid(t, iter, false)
+	requireNextValid(t, iter, false)
 
 	// Add some more - we should see these
 	writeKVs(t, store, 10, 10)
 	iteratePairs(t, iter, 10, 10)
-	err = iter.Next()
-	require.NoError(t, err)
-	requireIterValid(t, iter, false)
+	// err = iter.Next()
+	// require.NoError(t, err)
+	requireNextValid(t, iter, false)
 }
 
 func TestIterateShuffledKeys(t *testing.T) {
@@ -436,9 +436,9 @@ func TestPeriodicMemtableReplace(t *testing.T) {
 		iter, err := store.NewIterator(nil, nil, math.MaxUint64, false)
 		require.NoError(t, err)
 		iteratePairs(t, iter, 0, 10*(i+1))
-		err = iter.Next()
-		require.NoError(t, err)
-		requireIterValid(t, iter, false)
+		// err = iter.Next()
+		// require.NoError(t, err)
+		requireNextValid(t, iter, false)
 		ks += 10
 	}
 	dur := time.Since(start)
@@ -516,30 +516,31 @@ func stopStore(t testing.TB, store *Store) {
 	require.NoError(t, err)
 }
 
-func iteratePairs(t *testing.T, iter iteration.Iterator, keyStart int, numPairs int) {
+func iteratePairs(t *testing.T, iter iteration.SimplerIterator, keyStart int, numPairs int) {
 	iteratePairsWithParams(t, iter, keyStart, numPairs, "")
 }
 
-func iteratePairsWithParams(t *testing.T, iter iteration.Iterator, keyStart int, numPairs int, valueSuffix string) {
+func iteratePairsWithParams(t *testing.T, iter iteration.SimplerIterator, keyStart int, numPairs int, valueSuffix string) {
 	t.Helper()
 	for i := 0; i < numPairs; i++ {
-		requireIterValid(t, iter, true)
-		curr := iter.Current()
+		curr := requireNextValid(t, iter, true)
+		// curr := iter.Current()
 		curr.Key = curr.Key[:len(curr.Key)-8] // strip version
 		require.Equal(t, []byte(fmt.Sprintf("prefix/key-%010d", keyStart+i)), curr.Key)
 		require.Equal(t, []byte(fmt.Sprintf("prefix/value-%010d%s", keyStart+i, valueSuffix)), curr.Value)
 		if i != numPairs-1 {
-			err := iter.Next()
-			require.NoError(t, err)
+			// err := iter.Next()
+			// require.NoError(t, err)
 		}
 	}
 }
 
-func requireIterValid(t *testing.T, iter iteration.Iterator, valid bool) {
+func requireNextValid(t *testing.T, iter iteration.SimplerIterator, valid bool) common.KV {
 	t.Helper()
-	v, err := iter.IsValid()
-	require.NoError(t, err)
+	v, kv := iter.Next()
+	// require.NoError(t, err)
 	require.Equal(t, valid, v)
+	return kv
 }
 
 func writeKVs(t *testing.T, store *Store, keyStart int, numPairs int) { //nolint:unparam

@@ -21,7 +21,7 @@ type Iterator struct {
 	iter       *iteration.MergingIterator
 }
 
-func (s *Store) NewIterator(keyStart []byte, keyEnd []byte, highestVersion uint64, preserveTombstones bool) (iteration.Iterator, error) {
+func (s *Store) NewIterator(keyStart []byte, keyEnd []byte, highestVersion uint64, preserveTombstones bool) (iteration.SimplerIterator, error) {
 	log.Debugf("creating store iterator from keystart %v to keyend %v", keyStart, keyEnd)
 
 	if !s.started.Load() {
@@ -35,7 +35,7 @@ func (s *Store) NewIterator(keyStart []byte, keyEnd []byte, highestVersion uint6
 	s.mtFlushQueueLock.Lock()
 
 	// First we add the current memtable
-	iters := []iteration.Iterator{s.memTable.NewIterator(keyStart, keyEnd)}
+	iters := []iteration.SimplerIterator{s.memTable.NewIterator(keyStart, keyEnd)}
 
 	// Then we add each memtable in the flush queue, in order from newest to oldest
 	for i := len(s.mtQueue) - 1; i >= 0; i-- {
@@ -58,9 +58,9 @@ func (s *Store) NewIterator(keyStart []byte, keyEnd []byte, highestVersion uint6
 	return si, nil
 }
 
-func (s *Store) newStoreIterator(rangeStart []byte, rangeEnd []byte, iters []iteration.Iterator, lock *sync.RWMutex,
+func (s *Store) newStoreIterator(rangeStart []byte, rangeEnd []byte, iters []iteration.SimplerIterator, lock *sync.RWMutex,
 	highestVersion uint64, preserveTombstones bool) (*Iterator, error) {
-	mi, err := iteration.NewMergingIterator(iters, preserveTombstones, highestVersion)
+	mi, err := iteration.NewCompactionMergingIteratorFromSimple(iters, preserveTombstones, highestVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (s *Store) newStoreIterator(rangeStart []byte, rangeEnd []byte, iters []ite
 	return si, nil
 }
 
-func (s *Store) createSSTableIterators(keyStart []byte, keyEnd []byte) ([]iteration.Iterator, error) {
+func (s *Store) createSSTableIterators(keyStart []byte, keyEnd []byte) ([]iteration.SimplerIterator, error) {
 	ids, deadVersions, err := s.levelManagerClient.GetTableIDsForRange(keyStart, keyEnd)
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func (s *Store) createSSTableIterators(keyStart []byte, keyEnd []byte) ([]iterat
 	// Then we add each flushed SSTable with overlapping keys from the levelManagerClient. It's possible we might have the included
 	// the same keys twice in a memtable from the flush queue which has been already flushed and one from the LSM
 	// This is ok as he later one (the sstable) will just be ignored in the iterator.
-	var iters []iteration.Iterator
+	var iters []iteration.SimplerIterator
 	for i, nonOverLapIDs := range ids {
 		if len(nonOverLapIDs) == 1 {
 			log.Debugf("using sstable %v in iterator [%d, 0] for key start %v", nonOverLapIDs[0], i, keyStart)
@@ -93,7 +93,7 @@ func (s *Store) createSSTableIterators(keyStart []byte, keyEnd []byte) ([]iterat
 			}
 			iters = append(iters, lazy)
 		} else {
-			itersInChain := make([]iteration.Iterator, len(nonOverLapIDs))
+			itersInChain := make([]iteration.SimplerIterator, len(nonOverLapIDs))
 			for j, nonOverlapID := range nonOverLapIDs {
 				log.Debugf("using sstable %v in iterator [%d, %d] for key start %v", nonOverlapID, i, j, keyStart)
 				lazy, err := sst2.NewLazySSTableIterator(nonOverlapID, s.tableCache, keyStart, keyEnd, s.iterFactoryFunc())
@@ -102,7 +102,7 @@ func (s *Store) createSSTableIterators(keyStart []byte, keyEnd []byte) ([]iterat
 				}
 				itersInChain[j] = lazy
 			}
-			iters = append(iters, iteration.NewChainingIterator(itersInChain))
+			iters = append(iters, iteration.NewChainingIteratorFromSimple(itersInChain))
 		}
 	}
 	if len(deadVersions) > 0 {
@@ -116,8 +116,8 @@ func (s *Store) createSSTableIterators(keyStart []byte, keyEnd []byte) ([]iterat
 	return iters, nil
 }
 
-func (s *Store) iterFactoryFunc() func(sst *sst2.SSTable, keyStart []byte, keyEnd []byte) (iteration.Iterator, error) {
-	return func(sst *sst2.SSTable, keyStart []byte, keyEnd []byte) (iteration.Iterator, error) {
+func (s *Store) iterFactoryFunc() func(sst *sst2.SSTable, keyStart []byte, keyEnd []byte) (iteration.SimplerIterator, error) {
+	return func(sst *sst2.SSTable, keyStart []byte, keyEnd []byte) (iteration.SimplerIterator, error) {
 		sstIter, err := sst.NewIterator(keyStart, keyEnd)
 		if err != nil {
 			return nil, err
@@ -163,7 +163,7 @@ func (s *Iterator) getRange() ([]byte, []byte, []byte) {
 	return s.rangeStart, s.rangeEnd, s.lastKey
 }
 
-func (s *Iterator) addNewMemtableIterator(iter iteration.Iterator) error {
+func (s *Iterator) addNewMemtableIterator(iter iteration.SimplerIterator) error {
 	return s.iter.PrependIterator(iter)
 }
 
@@ -171,24 +171,14 @@ func (s *Iterator) Close() {
 	s.s.removeIterator(s)
 }
 
-func (s *Iterator) Current() common.KV {
+func (s *Iterator) Next() (bool, common.KV) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	curr := s.iter.Current()
-	s.lastKey = curr.Key
-	return curr
-}
-
-func (s *Iterator) Next() error {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.iter.Next()
-}
-
-func (s *Iterator) IsValid() (bool, error) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.iter.IsValid()
+	valid, curr := s.iter.Next()
+	if valid {
+		s.lastKey = curr.Key
+	}
+	return valid, curr
 }
 
 // FindKey - Useful method for debugging
@@ -199,21 +189,25 @@ func (s *Store) FindKey(key []byte) string {
 	defer s.mtFlushQueueLock.Unlock()
 
 	keyEnd := common.IncrementBytesBigEndian(key)
-	iter := s.memTable.NewIterator(key, keyEnd)
-	valid, err := iter.IsValid()
-	if err != nil {
-		panic(err)
-	}
+	// To check the iterator state we need to advance it.
+	// we make a copy to advance the iterator so it doesn't affect the state
+	// of the original memtable
+	memTableCopy := s.memTable
+	iter := memTableCopy.NewIterator(key, keyEnd)
+	valid, _ := iter.Next()
+	// if err != nil {
+	// panic(err)
+	// }
 	if valid {
 		return fmt.Sprintf("node %d key %v found in live memtable", s.conf.NodeID, key)
 	}
 	for _, entry := range s.mtQueue {
 		mt := entry.memtable
 		iter := mt.NewIterator(key, keyEnd)
-		valid, err := iter.IsValid()
-		if err != nil {
-			panic(err)
-		}
+		valid, _ := iter.Next()
+		// if err != nil {
+		// panic(err)
+		// }
 		if valid {
 			return fmt.Sprintf("node %d key %v found in memtable %s in flush queue", s.conf.NodeID, key,
 				mt.Uuid)

@@ -8,16 +8,15 @@ import (
 )
 
 type MemtableIterator struct {
-	it          *arenaskl.Iterator
-	prevIt      *arenaskl.Iterator
-	keyStart    []byte
-	keyEnd      []byte
-	curr        common.KV
-	valid       bool
-	initialSeek bool
+	it                         *arenaskl.Iterator
+	prevIt                     *arenaskl.Iterator
+	keyStart                   []byte
+	keyEnd                     []byte
+	initialSeek                bool
+	hasIterReturnedFirstResult bool
 }
 
-func (m *Memtable) NewIterator(keyStart []byte, keyEnd []byte) iteration.Iterator {
+func (m *Memtable) NewIterator(keyStart []byte, keyEnd []byte) iteration.SimplerIterator {
 	var it arenaskl.Iterator
 	it.Init(m.sl)
 	iter := &MemtableIterator{
@@ -29,20 +28,56 @@ func (m *Memtable) NewIterator(keyStart []byte, keyEnd []byte) iteration.Iterato
 	return iter
 }
 
-func (m *MemtableIterator) Current() common.KV {
-	if !m.valid {
-		panic("not valid")
-	}
-	return m.curr
-}
-
-func (m *MemtableIterator) Next() error {
-	// we make a copy of the iter before advancing in case we advance off the end (invalid) and later
-	// more records arrive
+func (m *MemtableIterator) copyAndForwardIter() {
+	// we make a copy of the iter before advancing in case we advance off the end (invalid) and later // more records arrive
 	prevCopy := *m.it
 	m.it.Next()
 	m.prevIt = &prevCopy
-	return nil
+}
+
+func (m *MemtableIterator) Next() (bool, common.KV) {
+	if !m.initialSeek {
+		m.doInitialSeek()
+	}
+
+	if m.it.Valid() && m.hasIterReturnedFirstResult {
+		m.copyAndForwardIter()
+	}
+
+	if !m.it.Valid() {
+		// Check the previous iter in case new entries were added
+		if m.prevIt != nil {
+			cp := *m.prevIt
+			m.prevIt.Next()
+			if m.prevIt.Valid() && (m.keyEnd == nil || bytes.Compare(m.prevIt.Key(), m.keyEnd) < 0) {
+				// There are new entries - reset the iterator to prev.next
+				m.it = m.prevIt
+				m.prevIt = nil
+				curr := common.KV{
+					Key:   m.it.Key(),
+					Value: m.it.Value(),
+				}
+				// m.copyAndForwardIter()
+				return true, curr
+			} else {
+				// Put the prevIter back - still not valid
+				m.prevIt = &cp
+				return false, common.KV{}
+			}
+		}
+		return false, common.KV{}
+	}
+
+	if m.keyEnd == nil || bytes.Compare(m.it.Key(), m.keyEnd) < 0 {
+		curr := common.KV{
+			Key:   m.it.Key(),
+			Value: m.it.Value(),
+		}
+		m.hasIterReturnedFirstResult = true
+		return true, curr
+	}
+
+	return false, common.KV{}
 }
 
 func (m *MemtableIterator) doInitialSeek() {
@@ -58,50 +93,6 @@ func (m *MemtableIterator) doInitialSeek() {
 		// should make the iterator valid
 		m.initialSeek = true
 	}
-}
-
-func (m *MemtableIterator) IsValid() (bool, error) {
-	if !m.initialSeek {
-		m.doInitialSeek()
-	}
-
-	if !m.it.Valid() {
-		// Check the previous iter in case new entries were added
-		if m.prevIt != nil {
-			cp := *m.prevIt
-			m.prevIt.Next()
-			if m.prevIt.Valid() && (m.keyEnd == nil || bytes.Compare(m.prevIt.Key(), m.keyEnd) < 0) {
-				// There are new entries - reset the iterator to prev.next
-				m.it = m.prevIt
-				m.prevIt = nil
-				m.valid = true
-				m.curr = common.KV{
-					Key:   m.it.Key(),
-					Value: m.it.Value(),
-				}
-				return true, nil
-			} else {
-				// Put the prevIter back - still not valid
-				m.prevIt = &cp
-				m.valid = false
-				return false, nil
-			}
-		}
-		m.valid = false
-		return false, nil
-	}
-
-	if m.keyEnd == nil || bytes.Compare(m.it.Key(), m.keyEnd) < 0 {
-		m.valid = true
-		m.curr = common.KV{
-			Key:   m.it.Key(),
-			Value: m.it.Value(),
-		}
-		return true, nil
-	}
-
-	m.valid = false
-	return false, nil
 }
 
 func (m *MemtableIterator) Close() {

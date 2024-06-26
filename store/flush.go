@@ -56,13 +56,13 @@ func (s *Store) triggerFlushLoop() {
 func (s *Store) buildSSTable(entry *flushQueueEntry) error {
 	log.Debugf("store %d in buildSSTables", s.conf.NodeID)
 	iter := entry.memtable.NewIterator(nil, nil)
-	valid, err := iter.IsValid()
-	if err != nil {
-		return err
-	}
-	if !valid {
-		return err
-	}
+	// valid, _ := iter.Next()
+	// if err != nil {
+	// return err
+	// }
+	// if !valid {
+	// return errors.New("")
+	//}
 	ssTable, smallestKey, largestKey, minVersion, maxVersion, err := sst2.BuildSSTable(s.conf.TableFormat,
 		int(s.conf.MemtableMaxSizeBytes), 8*1024, iter)
 	if err != nil {

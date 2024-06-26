@@ -1247,17 +1247,17 @@ func TestMergeIntoMultipleTables(t *testing.T) {
 		iter, err := res[j].sst.NewIterator(nil, nil)
 		require.NoError(t, err)
 		for {
-			valid, err := iter.IsValid()
-			require.NoError(t, err)
+			valid, curr := iter.Next()
+			// require.NoError(t, err)
 			if !valid {
 				break
 			}
 			expectedKey := encoding.EncodeVersion([]byte(fmt.Sprintf("xxxxxxxxxxxxxxxxsssssssskey%05d", i)), 1)
 			expectedValue := []byte(fmt.Sprintf("val%05d", i))
-			require.Equal(t, expectedKey, iter.Current().Key)
-			require.Equal(t, expectedValue, iter.Current().Value)
-			err = iter.Next()
-			require.NoError(t, err)
+			require.Equal(t, expectedKey, curr.Key)
+			require.Equal(t, expectedValue, curr.Value)
+			// err = iter.Next()
+			// require.NoError(t, err)
 			i++
 		}
 	}
@@ -1300,17 +1300,18 @@ func TestMergeSameKeysDifferentVersions(t *testing.T) {
 	iter, err := res[0].sst.NewIterator(nil, nil)
 	require.NoError(t, err)
 	for {
-		valid, err := iter.IsValid()
-		require.NoError(t, err)
+		valid, curr := iter.Next()
+		// valid, err := iter.IsValid()
+		// require.NoError(t, err)
 		if !valid {
 			break
 		}
 		expectedKey := encoding.EncodeVersion([]byte(key), uint64(i))
 		expectedValue := []byte(fmt.Sprintf("val%05d", i))
-		require.Equal(t, expectedKey, iter.Current().Key)
-		require.Equal(t, expectedValue, iter.Current().Value)
-		err = iter.Next()
-		require.NoError(t, err)
+		require.Equal(t, expectedKey, curr.Key)
+		require.Equal(t, expectedValue, curr.Value)
+		// err = iter.Next()
+		// require.NoError(t, err)
 		i--
 	}
 }

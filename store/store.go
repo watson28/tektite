@@ -405,7 +405,7 @@ func (s *Store) GetWithMaxVersion(key []byte, maxVersion uint64) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	iter, err := iteration.NewMergingIterator(iters, false, maxVersion)
+	iter, err := iteration.NewMergingIteratorFromSimple(iters, false, maxVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -421,16 +421,16 @@ func findInMemtable(mt *mem.Memtable, key []byte, keyEnd []byte, maxVersion uint
 	return getWithIterator(mt.NewIterator(key, keyEnd), key, maxVersion)
 }
 
-func getWithIterator(iter iteration.Iterator, key []byte, maxVersion uint64) ([]byte, error) {
+func getWithIterator(iter iteration.SimplerIterator, key []byte, maxVersion uint64) ([]byte, error) {
 	for {
-		valid, err := iter.IsValid()
-		if err != nil {
-			return nil, err
-		}
+		valid, kv := iter.Next()
+		// if err != nil {
+		// return nil, err
+		// }
 		if !valid {
 			return nil, nil
 		}
-		kv := iter.Current()
+		// kv := iter.Current()
 		ver := math.MaxUint64 - binary.BigEndian.Uint64(kv.Key[len(kv.Key)-8:])
 		// We skip past any versions which are too high. Note that iterator will always return highest versions first.
 		if ver <= maxVersion {
@@ -439,22 +439,22 @@ func getWithIterator(iter iteration.Iterator, key []byte, maxVersion uint64) ([]
 			}
 			return nil, nil
 		}
-		err = iter.Next()
-		if err != nil {
-			return nil, err
-		}
+		// err = iter.Next()
+		// if err != nil {
+		// return nil, err
+		//}
 	}
 }
 
-func getWithIteratorNoVersionCheck(iter iteration.Iterator, key []byte) ([]byte, error) {
-	valid, err := iter.IsValid()
-	if err != nil {
-		return nil, err
-	}
+func getWithIteratorNoVersionCheck(iter iteration.SimplerIterator, key []byte) ([]byte, error) {
+	valid, kv := iter.Next()
+	// if err != nil {
+	// return nil, err
+	// }
 	if !valid {
 		return nil, nil
 	}
-	kv := iter.Current()
+	// kv := iter.Current()
 	if bytes.Equal(key, kv.Key[:len(kv.Key)-8]) {
 		return kv.Value, nil
 	}
@@ -469,18 +469,18 @@ func (s *Store) Dump() error {
 	}
 	defer iter.Close()
 	for {
-		valid, err := iter.IsValid()
-		if err != nil {
-			return err
-		}
+		valid, curr := iter.Next()
+		// if err != nil {
+		// return err
+		//}
 		if !valid {
 			break
 		}
-		curr := iter.Current()
+		// curr := iter.Current()
 		log.Debugf("key:%v value:%v", curr.Key, curr.Value)
-		if err := iter.Next(); err != nil {
-			return err
-		}
+		// if err := iter.Next(); err != nil {
+		// return err
+		//}
 	}
 	log.Debug("*********** END DUMPING STORE")
 	return nil
