@@ -8,16 +8,16 @@ import (
 	log "github.com/spirit-labs/tektite/logger"
 )
 
-func (s *SSTable) NewIterator(keyStart []byte, keyEnd []byte) (iteration.Iterator, error) {
+func (s *SSTable) NewIterator(keyStart []byte, keyEnd []byte) (iteration.SimplerIterator, error) {
 	offset := s.findOffset(keyStart)
 	si := &SSTableIterator{
 		ss:         s,
 		nextOffset: offset,
 		keyEnd:     keyEnd,
 	}
-	if err := si.Next(); err != nil {
-		return nil, err
-	}
+	// if err := si.Next(); err != nil {
+	// return nil, err
+	// }
 	return si, nil
 }
 
@@ -29,14 +29,10 @@ type SSTableIterator struct {
 	keyEnd     []byte
 }
 
-func (si *SSTableIterator) Current() common.KV {
-	return si.currkV
-}
-
-func (si *SSTableIterator) Next() error {
+func (si *SSTableIterator) Next() (bool, common.KV) {
 	if si.nextOffset == -1 {
 		si.valid = false
-		return nil
+		return false, common.KV{}
 	}
 	indexOffset := int(si.ss.indexOffset)
 	var kl, vl uint32
@@ -46,6 +42,7 @@ func (si *SSTableIterator) Next() error {
 		// End of range
 		si.nextOffset = -1
 		si.valid = false
+		return false, common.KV{}
 	} else {
 		si.currkV.Key = k
 		si.nextOffset += int(kl)
@@ -61,12 +58,8 @@ func (si *SSTableIterator) Next() error {
 			si.nextOffset = -1
 		}
 		si.valid = true
+		return true, si.currkV
 	}
-	return nil
-}
-
-func (si *SSTableIterator) IsValid() (bool, error) {
-	return si.valid, nil
 }
 
 func (si *SSTableIterator) Close() {
@@ -81,12 +74,12 @@ type LazySSTableIterator struct {
 	tableCache  tableGetter
 	keyStart    []byte
 	keyEnd      []byte
-	iter        iteration.Iterator
-	iterFactory func(sst *SSTable, keyStart []byte, keyEnd []byte) (iteration.Iterator, error)
+	iter        iteration.SimplerIterator
+	iterFactory func(sst *SSTable, keyStart []byte, keyEnd []byte) (iteration.SimplerIterator, error)
 }
 
 func NewLazySSTableIterator(tableID SSTableID, tableCache tableGetter,
-	keyStart []byte, keyEnd []byte, factory func(sst *SSTable, keyStart []byte, keyEnd []byte) (iteration.Iterator, error)) (iteration.Iterator, error) {
+	keyStart []byte, keyEnd []byte, factory func(sst *SSTable, keyStart []byte, keyEnd []byte) (iteration.SimplerIterator, error)) (iteration.SimplerIterator, error) {
 	it := &LazySSTableIterator{
 		tableID:     tableID,
 		tableCache:  tableCache,
@@ -97,24 +90,12 @@ func NewLazySSTableIterator(tableID SSTableID, tableCache tableGetter,
 	return it, nil
 }
 
-func (l *LazySSTableIterator) Current() common.KV {
-	return l.iter.Current()
-}
-
-func (l *LazySSTableIterator) Next() error {
+func (l *LazySSTableIterator) Next() (bool, common.KV) {
 	iter, err := l.getIter()
 	if err != nil {
-		return err
+		return false, common.KV{}
 	}
 	return iter.Next()
-}
-
-func (l *LazySSTableIterator) IsValid() (bool, error) {
-	iter, err := l.getIter()
-	if err != nil {
-		return false, err
-	}
-	return iter.IsValid()
 }
 
 func (l *LazySSTableIterator) Close() {
@@ -131,24 +112,17 @@ func dumpSST(id SSTableID, sst *SSTable) {
 	}
 	log.Debugf("==============Dumping sstable: %v", id)
 	for {
-		valid, err := sstIter.IsValid()
-		if err != nil {
-			panic(err)
-		}
+		valid, current := sstIter.Next()
 		if !valid {
 			break
 		}
-		log.Debugf("key: %v (%s) value: %v (%s)", sstIter.Current().Key, string(sstIter.Current().Key),
-			sstIter.Current().Value, string(sstIter.Current().Value))
-		err = sstIter.Next()
-		if err != nil {
-			panic(err)
-		}
+		log.Debugf("key: %v (%s) value: %v (%s)", current.Key, string(current.Key),
+			current.Value, string(current.Value))
 	}
 	log.Debugf("==============End Dumping sstable: %v", id)
 }
 
-func (l *LazySSTableIterator) getIter() (iteration.Iterator, error) {
+func (l *LazySSTableIterator) getIter() (iteration.SimplerIterator, error) {
 	if l.iter == nil {
 		ssTable, err := l.tableCache.GetSSTable(l.tableID)
 		if err != nil {

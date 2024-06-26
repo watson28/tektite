@@ -11,7 +11,7 @@ import (
 
 // RemoveExpiredEntriesIterator filters out any keys which have expired due to retention time being exceeded
 type RemoveExpiredEntriesIterator struct {
-	iter              iteration2.Iterator
+	iter              iteration2.SimplerIterator
 	sstCreationTime   uint64
 	now               uint64
 	retentionProvider RetentionProvider
@@ -21,7 +21,7 @@ type RetentionProvider interface {
 	GetSlabRetention(slabID int) (time.Duration, error)
 }
 
-func NewRemoveExpiredEntriesIterator(iter iteration2.Iterator, sstCreationTime uint64, now uint64,
+func NewRemoveExpiredEntriesIterator(iter iteration2.SimplerIterator, sstCreationTime uint64, now uint64,
 	retentionProvider RetentionProvider) *RemoveExpiredEntriesIterator {
 	return &RemoveExpiredEntriesIterator{
 		iter:              iter,
@@ -31,39 +31,32 @@ func NewRemoveExpiredEntriesIterator(iter iteration2.Iterator, sstCreationTime u
 	}
 }
 
-func (r *RemoveExpiredEntriesIterator) Current() common.KV {
-	return r.iter.Current()
-}
-
-func (r *RemoveExpiredEntriesIterator) Next() error {
-	return r.iter.Next()
-}
-
-func (r *RemoveExpiredEntriesIterator) IsValid() (bool, error) {
+func (r *RemoveExpiredEntriesIterator) Next() (bool, common.KV) {
 	for {
-		valid, err := r.iter.IsValid()
-		if err != nil {
-			return false, err
-		}
+		valid, curr := r.iter.Next()
+		// valid, err := r.iter.IsValid()
+		// if err != nil {
+		// return false, err
+		// }
 		if !valid {
-			return false, nil
+			return false, common.KV{}
 		}
-		curr := r.iter.Current()
+		// curr := r.iter.Current()
 		expired, err := r.isExpired(curr.Key)
 		if err != nil {
-			return false, err
+			return false, common.KV{}
 		}
 		if !expired {
-			return true, nil
+			return true, curr
 		}
 		if log.DebugEnabled {
 			log.Debugf("RemoveExpiredEntriesIterator removed key %v (%s) value %v (%s)", curr.Key, string(curr.Key),
 				curr.Value, string(curr.Value))
 		}
-		err = r.iter.Next()
-		if err != nil {
-			return false, err
-		}
+		// err = r.iter.Next()
+		// if err != nil {
+		// return false, err
+		// }
 	}
 }
 
@@ -85,47 +78,40 @@ func (r *RemoveExpiredEntriesIterator) isExpired(key []byte) (bool, error) {
 
 // RemoveDeadVersionsIterator filters out any dead version ranges
 type RemoveDeadVersionsIterator struct {
-	iter              iteration2.Iterator
+	iter              iteration2.SimplerIterator
 	deadVersionRanges []VersionRange
 }
 
-func NewRemoveDeadVersionsIterator(iter iteration2.Iterator, deadVersionRanges []VersionRange) *RemoveDeadVersionsIterator {
+func NewRemoveDeadVersionsIterator(iter iteration2.SimplerIterator, deadVersionRanges []VersionRange) *RemoveDeadVersionsIterator {
 	return &RemoveDeadVersionsIterator{
 		iter:              iter,
 		deadVersionRanges: deadVersionRanges,
 	}
 }
 
-func (r *RemoveDeadVersionsIterator) Current() common.KV {
-	return r.iter.Current()
-}
-
-func (r *RemoveDeadVersionsIterator) Next() error {
-	return r.iter.Next()
-}
-
-func (r *RemoveDeadVersionsIterator) IsValid() (bool, error) {
+func (r *RemoveDeadVersionsIterator) Next() (bool, common.KV) {
 	for {
-		valid, err := r.iter.IsValid()
-		if err != nil {
-			return false, err
-		}
+		valid, curr := r.iter.Next()
+		// valid, err := r.iter.IsValid()
+		// if err != nil {
+		// return false, err
+		// }
 		if !valid {
-			return false, nil
+			return false, curr
 		}
-		curr := r.iter.Current()
+		// curr := r.iter.Current()
 		dead := r.hasDeadVersion(curr.Key)
 		if !dead {
-			return true, nil
+			return true, curr
 		}
 		if log.DebugEnabled {
 			log.Debugf("RemoveDeadVersionsIterator removed key %v (%s) value %v (%s)", curr.Key, string(curr.Key),
 				curr.Value, string(curr.Value))
 		}
-		err = r.iter.Next()
-		if err != nil {
-			return false, err
-		}
+		// err = r.iter.Next()
+		// if err != nil {
+		// return false, err
+		// }
 	}
 }
 

@@ -354,9 +354,9 @@ func mergeSSTables(format common.DataFormat, tables [][]tableToMerge, preserveTo
 	lastFlushedVersion int64, jobID string, retentionProvider RetentionProvider, serverTime uint64) ([]ssTableInfo, error) {
 
 	totEntries := 0
-	chainIters := make([]iteration2.Iterator, len(tables))
+	chainIters := make([]iteration2.SimplerIterator, len(tables))
 	for i, overlapping := range tables {
-		sourceIters := make([]iteration2.Iterator, len(overlapping))
+		sourceIters := make([]iteration2.SimplerIterator, len(overlapping))
 		for j, table := range overlapping {
 			sstIter, err := table.sst.NewIterator(nil, nil)
 			log.Debugf("mergingSSTables with dead version range %v", table.deadVersionRanges)
@@ -373,7 +373,7 @@ func mergeSSTables(format common.DataFormat, tables [][]tableToMerge, preserveTo
 			}
 			totEntries += table.sst.NumEntries()
 		}
-		chainIter := iteration2.NewChainingIterator(sourceIters)
+		chainIter := iteration2.NewChainingIteratorFromSimple(sourceIters)
 		chainIters[i] = chainIter
 	}
 
@@ -386,7 +386,7 @@ func mergeSSTables(format common.DataFormat, tables [][]tableToMerge, preserveTo
 		// This ensures we don't lose any keys that we need after rolling back to lastFlushedVersion on failure
 		minNonCompactableVersion = uint64(lastFlushedVersion)
 	}
-	mi, err := iteration2.NewCompactionMergingIterator(chainIters, preserveTombstones, minNonCompactableVersion)
+	mi, err := iteration2.NewCompactionMergingIteratorFromSimple(chainIters, preserveTombstones, minNonCompactableVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -395,17 +395,18 @@ func mergeSSTables(format common.DataFormat, tables [][]tableToMerge, preserveTo
 
 	mergeResults := make([]common.KV, 0, totEntries)
 	for {
-		valid, err := mi.IsValid()
-		if err != nil {
-			return nil, err
-		}
+		valid, curr := mi.Next()
+		// valid, err := mi.IsValid()
+		// if err != nil {
+		// return nil, err
+		// }
 		if !valid {
 			break
 		}
-		mergeResults = append(mergeResults, mi.Current())
-		if err := mi.Next(); err != nil {
-			return nil, err
-		}
+		mergeResults = append(mergeResults, curr)
+		// if err := mi.Next(); err != nil {
+		// return nil, err
+		// }
 	}
 
 	size := 0
@@ -477,14 +478,15 @@ func validateRegEntry(entry RegistrationEntry, objStore objstore.Client) {
 	var firstKey []byte
 	var lastKey []byte
 	for {
-		valid, err := iter.IsValid()
-		if err != nil {
-			panic(err)
-		}
+		valid, curr := iter.Next()
+		// valid, err := iter.IsValid()
+		// if err != nil {
+		// panic(err)
+		// }
 		if !valid {
 			break
 		}
-		curr := iter.Current()
+		// curr := iter.Current()
 		if lastKey != nil && bytes.Compare(curr.Key, lastKey) <= 0 {
 			panic(fmt.Sprintf("key out of order or duplicate %s", string(curr.Key)))
 		}
@@ -492,10 +494,10 @@ func validateRegEntry(entry RegistrationEntry, objStore objstore.Client) {
 			firstKey = curr.Key
 		}
 		lastKey = curr.Key
-		err = iter.Next()
-		if err != nil {
-			panic(err)
-		}
+		// err = iter.Next()
+		// if err != nil {
+		// panic(err)
+		// }
 	}
 	if !bytes.Equal(firstKey, entry.KeyStart) {
 		panic(fmt.Sprintf("first key %v (%s) and range start %v (%s) are not equal",
@@ -517,20 +519,13 @@ type sliceIterator struct {
 	pos  int
 }
 
-func (s *sliceIterator) Current() common.KV {
+func (s *sliceIterator) Next() (bool, common.KV) {
 	if s.pos >= s.lkvs {
-		return common.KV{}
+		return false, common.KV{}
 	}
-	return s.kvs[s.pos]
-}
-
-func (s *sliceIterator) Next() error {
+	result := s.kvs[s.pos]
 	s.pos++
-	return nil
-}
-
-func (s *sliceIterator) IsValid() (bool, error) {
-	return s.pos < s.lkvs, nil
+	return true, result
 }
 
 func (s *sliceIterator) Close() {

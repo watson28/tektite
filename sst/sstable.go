@@ -54,7 +54,7 @@ type SSTable struct {
 const metadataSize = 28
 
 func BuildSSTable(format common.DataFormat, buffSizeEstimate int, entriesEstimate int,
-	iter iteration.Iterator) (ssTable *SSTable, smallestKey []byte, largestKey []byte, minVersion uint64,
+	iter iteration.SimplerIterator) (ssTable *SSTable, smallestKey []byte, largestKey []byte, minVersion uint64,
 	maxVersion uint64, err error) {
 
 	type indexEntry struct {
@@ -77,14 +77,10 @@ func BuildSSTable(format common.DataFormat, buffSizeEstimate int, entriesEstimat
 	first := true
 	var prevKey []byte
 	for {
-		v, err := iter.IsValid()
-		if err != nil {
-			return nil, nil, nil, 0, 0, err
-		}
+		v, kv := iter.Next()
 		if !v {
 			break
 		}
-		kv := iter.Current()
 		// Sanity checks - can maybe remove them or activate them only with a flag for performance
 		if prevKey != nil && bytes.Compare(prevKey, kv.Key) >= 0 {
 			panic("keys not in order / contains duplicates")
@@ -119,10 +115,6 @@ func BuildSSTable(format common.DataFormat, buffSizeEstimate int, entriesEstimat
 		}
 		if version < minVersion {
 			minVersion = version
-		}
-
-		if err := iter.Next(); err != nil {
-			return nil, nil, nil, 0, 0, err
 		}
 	}
 
