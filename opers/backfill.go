@@ -40,7 +40,7 @@ type BackfillOperator struct {
 // Always accessed from same GR apart from the closed atomic bool
 type iteratorInfo struct {
 	initialised      bool
-	iter             iteration.Iterator
+	iter             iteration.SimplerIterator
 	lagging          bool
 	loadedAllRows    bool
 	lastLoadedOffset int64
@@ -382,10 +382,7 @@ func (b *BackfillOperator) loadBatchForPartition(partID int) (*evbatch.Batch, er
 	rowCount := 0
 	var lastLoadedOffset = int64(-1)
 	for rowCount < b.maxBackfillBatchSize {
-		valid, err := info.iter.IsValid()
-		if err != nil {
-			return nil, err
-		}
+		valid, curr := info.iter.Next()
 		if !valid {
 			// No more rows
 			info.loadedAllRows = true
@@ -393,7 +390,7 @@ func (b *BackfillOperator) loadBatchForPartition(partID int) (*evbatch.Batch, er
 			lastLoadedOffset = -1
 			break
 		}
-		curr := info.iter.Current()
+		// curr := info.iter.Current()
 		k, _ := encoding.KeyDecodeInt(curr.Key, 25) // 17 as 1 byte null marker before offset
 		lastLoadedOffset = k
 		colBuilders[0].(*evbatch.IntColBuilder).Append(k)
@@ -445,10 +442,10 @@ func (b *BackfillOperator) loadBatchForPartition(partID int) (*evbatch.Batch, er
 			}
 		}
 		rowCount++
-		err = info.iter.Next()
-		if err != nil {
-			return nil, err
-		}
+		// err = info.iter.Next()
+		// if err != nil {
+		// return nil, err
+		// }
 	}
 	info.lastLoadedOffset = lastLoadedOffset
 	batch := evbatch.NewBatchFromBuilders(b.schema.EventSchema, colBuilders...)

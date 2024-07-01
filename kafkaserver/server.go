@@ -21,7 +21,7 @@ const (
 )
 
 type store interface {
-	NewIterator(keyStart []byte, keyEnd []byte, highestVersion uint64, preserveTombstones bool) (iteration.Iterator, error)
+	NewIterator(keyStart []byte, keyEnd []byte, highestVersion uint64, preserveTombstones bool) (iteration.SimplerIterator, error)
 	Get(key []byte) ([]byte, error)
 }
 

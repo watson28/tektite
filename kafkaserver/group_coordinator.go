@@ -1139,14 +1139,11 @@ func (g *group) loadOffset(topicID int64, partitionID int32) (int64, bool, error
 		return 0, false, err
 	}
 	defer iter.Close()
-	valid, err := iter.IsValid()
-	if err != nil {
-		return 0, false, err
-	}
+	valid, curr := iter.Next()
 	if !valid {
 		return 0, false, nil
 	}
-	curr := iter.Current()
+	// curr := iter.Current()
 	offset, _ := encoding.ReadUint64FromBufferLE(curr.Value, 1)
 	log.Debugf("group:%d topic:%d partition:%d loaded committed offset:%d", g.id, topicID, partitionID, offset)
 	return int64(offset), true, nil

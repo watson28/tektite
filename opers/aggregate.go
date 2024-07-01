@@ -461,14 +461,10 @@ func (a *AggregateOperator) loadOpenWindows(partitionID int) ([]windowEntry, err
 	defer iter.Close()
 	var openWindows []windowEntry
 	for {
-		valid, err := iter.IsValid()
-		if err != nil {
-			return nil, err
-		}
+		valid, curr := iter.Next()
 		if !valid {
 			break
 		}
-		curr := iter.Current()
 		ws, _ := encoding.KeyDecodeTimestamp(curr.Key, 24)
 		we, _ := encoding.ReadUint64FromBufferLE(curr.Value, 0)
 		entry := windowEntry{
@@ -476,9 +472,6 @@ func (a *AggregateOperator) loadOpenWindows(partitionID int) ([]windowEntry, err
 			we: int64(we),
 		}
 		openWindows = append(openWindows, entry)
-		if err := iter.Next(); err != nil {
-			return nil, err
-		}
 	}
 	sort.SliceStable(openWindows, func(i, j int) bool {
 		return openWindows[i].ws < openWindows[j].ws
@@ -567,14 +560,13 @@ func (a *AggregateOperator) closeWindow(entry windowEntry, partitionID int, exec
 	colBuilders := evbatch.CreateColBuilders(a.outSchema.EventSchema.ColumnTypes())
 	hasData := false
 	for {
-		valid, err := iter.IsValid()
+		valid, curr := iter.Next()
 		if err != nil {
 			return false, err
 		}
 		if !valid {
 			break
 		}
-		curr := iter.Current()
 		key := curr.Key
 		if !a.includeWindowCols {
 			key = curr.Key[18:] // first part of key is ws, we, so we truncate that part
@@ -583,9 +575,9 @@ func (a *AggregateOperator) closeWindow(entry windowEntry, partitionID int, exec
 			return false, err
 		}
 		LoadColsFromValue(colBuilders, a.outAggColTypes, a.outAggColIndexes, curr.Value)
-		if err := iter.Next(); err != nil {
-			return false, err
-		}
+		// if err := iter.Next(); err != nil {
+		// return false, err
+		// }
 		hasData = true
 	}
 	if !hasData {

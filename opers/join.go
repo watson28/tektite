@@ -579,19 +579,16 @@ func (j *JoinOperator) handleIncomingStreamStream(batch *evbatch.Batch, execCtx 
 	return nil, nil
 }
 
-func (j *JoinOperator) appendRows(iter iteration.Iterator, batch *evbatch.Batch, rowIndex int, ctx *handleIncomingCtx,
+func (j *JoinOperator) appendRows(iter iteration.SimplerIterator, batch *evbatch.Batch, rowIndex int, ctx *handleIncomingCtx,
 	includeNonMatched bool, outBuilders []evbatch.ColumnBuilder, eventTimeCol *evbatch.TimestampColumn, streamTableJoin bool,
 	incomingET int64) ([]evbatch.ColumnBuilder, error) {
 	lookedUp := false
 	for {
-		valid, err := iter.IsValid()
-		if err != nil {
-			return nil, err
-		}
+		valid, curr := iter.Next()
 		if !valid {
 			break
 		}
-		curr := iter.Current()
+		// curr := iter.Current()
 
 		// combine the column values from the incoming batch with the column vals from the looked up row
 		if outBuilders == nil {
@@ -636,9 +633,9 @@ func (j *JoinOperator) appendRows(iter iteration.Iterator, batch *evbatch.Batch,
 		}
 
 		outBuilders[0].(*evbatch.TimestampColBuilder).Append(types.NewTimestamp(etToUse))
-		if err := iter.Next(); err != nil {
-			return nil, err
-		}
+		// if err := iter.Next(); err != nil {
+		// return nil, err
+		// }
 
 		lookedUp = true
 	}

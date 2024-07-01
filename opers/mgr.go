@@ -111,7 +111,7 @@ const SlabTypeQueryableInternal = SlabType(2)
 const SlabTypeInternal = SlabType(3)
 
 type store interface {
-	NewIterator(keyStart []byte, keyEnd []byte, highestVersion uint64, preserveTombstones bool) (iteration.Iterator, error)
+	NewIterator(keyStart []byte, keyEnd []byte, highestVersion uint64, preserveTombstones bool) (iteration.SimplerIterator, error)
 	Get(key []byte) ([]byte, error)
 	GetWithMaxVersion(key []byte, maxVersion uint64) ([]byte, error)
 	Write(batch *mem.Batch) error
@@ -1857,7 +1857,7 @@ func (sm *streamManager) deleteStreamMeta(streamName string) {
 	sm.streamMemStore.Remove(string(keyBuff))
 }
 
-func (sm *streamManager) streamMetaIterator(startKey []byte, endKey []byte) iteration.Iterator {
+func (sm *streamManager) streamMetaIterator(startKey []byte, endKey []byte) iteration.SimplerIterator {
 	sm.lock.RLock()
 	defer sm.lock.RUnlock()
 	var entries []common.KV
@@ -1872,7 +1872,7 @@ func (sm *streamManager) streamMetaIterator(startKey []byte, endKey []byte) iter
 			})
 		}
 	}
-	return iteration.NewIteratorAdapter(iteration.NewStaticIterator(entries))
+	return iteration.NewStaticIterator(entries)
 }
 
 func (sm *streamManager) StreamMetaIteratorProvider() *StreamMetaIteratorProvider {
@@ -1883,7 +1883,7 @@ type StreamMetaIteratorProvider struct {
 	pm *streamManager
 }
 
-func (s *StreamMetaIteratorProvider) NewIterator(keyStart []byte, keyEnd []byte, _ uint64, _ bool) (iteration.Iterator, error) {
+func (s *StreamMetaIteratorProvider) NewIterator(keyStart []byte, keyEnd []byte, _ uint64, _ bool) (iteration.SimplerIterator, error) {
 	return s.pm.streamMetaIterator(keyStart, keyEnd), nil
 }
 
